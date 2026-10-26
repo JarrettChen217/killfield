@@ -1,4 +1,6 @@
 target/
+# The isolated native target is a symlink, not a directory in this checkout.
+/engine/target
 *.txt
 !docs/*.txt
 !training/requirements.txt

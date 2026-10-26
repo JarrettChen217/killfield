@@ -115,6 +115,9 @@ def evaluate_panel(model, output, deadline, seeds=range(19000, 19100)):
                 break
             env = HybridDuelVec(1, seed, (1, 0, 0), 1)
             row = {'seed': seed, 'result': 'partial', 'frames': 0}
+            # Predetermined first-case action replay, never selected for a win.
+            if seed == seeds[0]:
+                row['actions'] = []
             try:
                 for frame in range(env.episode_frames + env.grace_frames + 1):
                     if time.time() >= deadline:
@@ -123,6 +126,8 @@ def evaluate_panel(model, output, deadline, seeds=range(19000, 19100)):
                     mask = torch.as_tensor(env.masks.astype(bool), device=device)
                     logits, _ = model(obs, mask)
                     action = logits.argmax(-1).cpu().numpy()
+                    if 'actions' in row:
+                        row['actions'].append(int(action[0]))
                     env.step(action)
                     row['frames'] = frame + 1
                     if env.dones[0]:

@@ -1,0 +1,71 @@
+{
+  "kind": "killfield-rl-isolated-engineering-smoke",
+  "date_local": "2026-10-25",
+  "timezone": "America/New_York",
+  "fork": "https://github.com/JarrettChen217/killfield",
+  "upstream_revision": "9a9ecc9512cdc066f8c97a86b7ce5ca61ce8eacf",
+  "run_revision": "40bafd6860420d09b6c6d53ebd5750445e7ec4f7",
+  "branch": "repro/ubuntu-cpu-smoke",
+  "source_files_equal": 101,
+  "source_inventory_sha256": "d296404520b851fb8c94f6d26ee3cae6405a3d78844991f072673500bd5d7590",
+  "uv_lock_sha256": "be339f71e51b34e9afe409fb5281b1118a69556cd0e4dc66af596afb13f759a2",
+  "rust": "1.88.0",
+  "python": "3.12.15",
+  "numpy": "2.5.2",
+  "torch": "2.13.0+cpu",
+  "cuda": null,
+  "native_tests": {
+    "passed": 60,
+    "failed": 0,
+    "seconds": 3.69
+  },
+  "native_release_build_seconds": 1.98,
+  "smoke": {
+    "seed": 11,
+    "envs": 32,
+    "steps": 8192,
+    "updates": 2,
+    "critic_only_updates": 2,
+    "ppo_actor_loss_updates": 0,
+    "seconds": 6.431075805998262,
+    "cap_seconds": 300,
+    "returncode": 0,
+    "opponents": {
+      "laika": 1,
+      "mpc": 0,
+      "frozen": 0
+    }
+  },
+  "model_bundles": {
+    "live.pt": {
+      "bytes": 910445,
+      "sha256": "af86d7ba09901c7c662112f39fc13ee62f5ce405f7b0c796ac4fdd9df0269ef9"
+    },
+    "resume.pt": {
+      "bytes": 2697453,
+      "sha256": "1ca7401ec9e35023cf4b56beacedf5e4cf774e0bced313758f700bac8ab0aee5"
+    },
+    "final.pt": {
+      "bytes": 911037,
+      "sha256": "4fcb7bfbd2a14726d13c5a0dcdf5b610bf31e26080ab59ebb1fe7dfa03336897"
+    }
+  },
+  "source_unchanged": true,
+  "protected_files_unchanged": 5,
+  "process_exited": true,
+  "runtime_allocated_bytes": 1614946304,
+  "disk_free_after": 113402798080,
+  "global_rust_homes_created": false,
+  "system_python": "3.10.12",
+  "tank_project_unchanged_at": "2351c2c241d92ac1f8d227a940f254f32bddaf66",
+  "backup": {
+    "files": 13,
+    "bytes": 4554971,
+    "all_sha_verified": true
+  },
+  "operational_supervisor_sha256": "50a94a06a9ecf449e6783262a0601b63d54c0247b0cd672c9a156e669c7e604e",
+  "reported_100_game_win_rate": null,
+  "browser_review": false,
+  "mature_hybrid_reproduction": false,
+  "additional_training_started": false
+}

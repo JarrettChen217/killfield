@@ -1,3 +1,5 @@
+> Current planning update —2026-10-25: Hao accepted integration and requested a seven-day next-executor plan, deadline2026-11-01 23:59 America/New_York. Routine scoped execution is delegated when Hao supplies the prompt; SSH/new regions/new downloads require specific permission. Read the [shared weekly spec](https://github.com/JarrettChen217/tank-trouble-reconstruction/blob/research/rl-bot/docs/superpowers/specs/2026-10-25-seven-day-rl-delegation.md), [implementation plan](https://github.com/JarrettChen217/tank-trouble-reconstruction/blob/research/rl-bot/docs/superpowers/plans/2026-10-25-seven-day-rl-execution.md) and [status](https://github.com/JarrettChen217/tank-trouble-reconstruction/blob/research/rl-bot/docs/RL_STATUS.md). They supersede the earlier single-run proposal below for the delegated week only. No new run, SSH access, package install, session or automation occurred in planning. Asana only; no Slack. Keep main/release separate.
+
 # Fork research integration — 2026-10-25
 
 AI-use disclosure: Codex prepared this handoff under Hao's direction.

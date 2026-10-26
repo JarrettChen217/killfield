@@ -41,3 +41,8 @@ are preserved. This is an engineering smoke, not mature Hybrid reproduction.
    unfulfilled; do not label this smoke a completed behavioral training run.
 6. Report actual disk use, checks, deviations and protected persistent-file
    fingerprints. Preserve upstream docs rather than overwriting their history.
+
+
+## Completed week1 reference validation
+
+The bounded delegated study completed October26,2026; see [WEEK1_RESULTS](WEEK1_RESULTS.md). Actual100-game schema20 rates: seed11step0/u64/u2563%/11%/26%, seed22/33u648%/9%. Generic tools/config/tests/analysis live in Tank; this fork only holds minimal reference trainer/evaluator hooks. All declared500cases/8viewer observations complete, jobs closed; no automatic next run or main/publication acceptance. Earlier smoke remains historical engineering only.

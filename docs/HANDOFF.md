@@ -1,3 +1,5 @@
+> Current fork D delivery: [reconstructed schema24 result](../repro/D_RESULTS_2026-10-26.md), freshseed11 64updates/1,048,576decisions, fixedLaika100case panels4%→57%, no exact v17b/convergence claim. SessionII owns this fork/reference CUDA; Tank belongs to SessionI. Source protocol/assumptions/checkpoints/cost/stopped-process evidence linked there. No further run/research/main merge authorized by this notice; historical author/schema20 text below is retained.
+
 > Fork status (2026-10-25): read [research handoff](../repro/RESEARCH_HANDOFF.md) first. `research/rl-bot` contains the isolated engineering smoke only; upstream training/checkpoint statements below are historical, not our measured result. No new training is authorized.
 
 # 接手须知

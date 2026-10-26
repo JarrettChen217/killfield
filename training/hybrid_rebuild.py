@@ -162,9 +162,11 @@ class ResearchHook:
         self.output = Path(self.context['output'])
         self.output.mkdir(parents=True, exist_ok=True)
         self.deadline = self.context['deadline_unix']
+        self.started=time.monotonic(); self.panel_seconds=0.; self.last_profile={}
 
     def restore(self, payload):
         if payload is None:
+            self.restored_update=self.restored_steps=0
             return 0, 0
         state = payload['research']
         if state['protocol_sha256'] != self.context['protocol_sha256']:
@@ -175,11 +177,34 @@ class ResearchHook:
         np.random.set_state(state['numpy_rng'])
         if torch.cuda.is_available():
             torch.cuda.set_rng_state_all([v.cpu() for v in state['cuda_rng']])
+        self.restored_update=state['update']; self.restored_steps=payload['trained_steps']
         return state['update'], state['warmup_completed']
 
-    def before_rollout(self, batch):
-        if time.time() >= self.deadline - self.context.get('checkpoint_reserve_seconds', 10):
+    def before_optimizer_step(self):
+        # Opt-in absolute backstop, in addition to the earlier full-update reserve.
+        if time.time() >= self.context.get('optimization_deadline_unix', self.deadline):
             raise SystemExit(75)
+
+    def metric(self, record):
+        self.last_profile=record.get('engineering_profile',{})
+        if not self.context.get('compact_metrics'):
+            return record
+        return {'update':self.restored_update+record['update']+1,
+                'model_steps':self.restored_steps+record['steps'],
+                **{k:record[k] for k in ('critic_only','lr','entropy','policy_loss',
+                   'value_loss','approx_kl','clipfrac','change_rate')},
+                **({'engineering_profile':record['engineering_profile']}
+                   if (record['update']+1)%64==0 and 'engineering_profile' in record else {})}
+
+    def before_rollout(self, batch):
+        stop=self.context.get('optimization_deadline_unix',self.deadline)
+        if time.time() >= stop - self.context.get('checkpoint_reserve_seconds', 10):
+            raise SystemExit(75)
+        if self.context.get('storage_root'):
+            used=sum(p.stat().st_size for p in Path(self.context['storage_root']).rglob('*') if p.is_file())
+            if used+3500000>self.context['storage_cap_bytes']:
+                atomic_json(self.output/'stop-reason.json',{'reason':'pre-update storage reserve', 'used_bytes':used})
+                raise SystemExit(75)
         if shutil.disk_usage(self.output).free < 10*1024**3:
             raise RuntimeError('disk reserve below10GiB')
 
@@ -187,8 +212,15 @@ class ResearchHook:
                 save_live, save_resume, started, schedule_steps):
         if any(not torch.isfinite(v).all() for v in model.state_dict().values()):
             raise FloatingPointError('nonfinite reconstructed model')
+        budget_root=self.context.get('storage_root')
+        if budget_root:
+            used=sum(p.stat().st_size for p in Path(budget_root).rglob('*') if p.is_file())
+            if used + self.context.get('publication_reserve_bytes',3300000) > self.context['storage_cap_bytes']:
+                raise SystemExit(75)
         metadata = {'protocol_sha256':self.context['protocol_sha256'],
                     'update':update, 'warmup_completed':warmup_completed,
+                    'continuation_protocol_sha256':self.context.get('continuation_protocol_sha256'),
+                    'fork_head':self.context.get('source_head'),
                     'torch_rng':torch.get_rng_state(), 'numpy_rng':np.random.get_state(),
                     'cuda_rng':torch.cuda.get_rng_state_all() if torch.cuda.is_available() else []}
         save_live(self.output, model, config, model_steps, update, started, model_steps, schedule_steps)
@@ -211,6 +243,38 @@ class ResearchHook:
                 if result['status'] != 'complete':
                     raise SystemExit(75)
         print('FULL_CHECKPOINT '+json.dumps({k:v for k,v in marker.items() if k!='files'}), flush=True)
+        if update in self.context.get('panel_updates',[]):
+            from hybrid_telemetry import evaluate_telemetry
+            result=evaluate_telemetry(model,self.output/f'panel-u{update}.jsonl',
+                                     min(self.deadline-10,time.time()+240))
+            self.panel_seconds+=result['seconds']
+            result['update']=update; result['model_steps']=model_steps
+            atomic_json(self.output/f'panel-u{update}.summary.json',result)
+            print('FIXED_PANEL '+json.dumps(result),flush=True)
+            if result['status']!='complete':raise SystemExit(75)
+            if update>=1024:
+                post=[u for u in self.context['panel_updates'] if 512<=u<=update]
+                if len(post)>=3:
+                    wins=[json.loads((self.output/f'panel-u{u}.summary.json').read_text())
+                          ['counts']['win'] for u in post[-3:]]
+                    if max(wins)-min(wins)<=2:
+                        atomic_json(self.output/'stop-reason.json',
+                            {'reason':'predeclared development-panel plateau hint',
+                             'update':update,'last_three_wins':wins,
+                             'not_statistical_convergence':True})
+                        raise SystemExit(76)
+            if update>=256:
+                future=[u for u in self.context['panel_updates'] if u>update]
+                if future:
+                    per_update=(time.monotonic()-self.started-self.panel_seconds)/max(1,update-self.restored_update)
+                    estimate=(future[0]-update)*per_update*1.25+60
+                    if (time.time()+estimate>=self.context['optimization_deadline_unix']
+                        or time.time()+estimate+min(240,result['seconds']*1.25)>=self.deadline-15):
+                        atomic_json(self.output/'stop-reason.json',{'reason':'next fixed block does not fit measured time window',
+                            'update':update,'next_endpoint':future[0],'estimated_block_seconds':estimate})
+                        raise SystemExit(76)
+        if update==self.context.get('stop_after_update'):
+            raise SystemExit(75)
         if self.context.get('pause_after') == update:
             raise SystemExit(75)
 

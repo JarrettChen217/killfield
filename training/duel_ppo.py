@@ -602,6 +602,8 @@ def main():
                     loss = (policy_loss
                             + config.value_coefficient * value_loss
                             - entropy_coefficient * entropy)
+                if research_hook and hasattr(research_hook, 'before_optimizer_step'):
+                    research_hook.before_optimizer_step()
                 optimiser.zero_grad(set_to_none=True)
                 loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
@@ -647,7 +649,9 @@ def main():
                                              if device.type == "cuda" else None),
             }
         with metrics_path.open("a") as handle:
-            handle.write(json.dumps(record) + "\n")
+            saved_record = (research_hook.metric(record)
+                            if research_hook and hasattr(research_hook, 'metric') else record)
+            handle.write(json.dumps(saved_record) + "\n")
             if research_hook:
                 handle.flush()
                 os.fsync(handle.fileno())

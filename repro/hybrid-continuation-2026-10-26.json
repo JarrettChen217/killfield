@@ -1,0 +1,88 @@
+{
+  "run_id": "D-schema24-s11-continuation-20261026",
+  "kind": "same-lineage fixed-recipe continuation",
+  "original_protocol_sha256": "d596e1a301667aafcb0c18c6eeff1c5d96f64527c657f9c274c230a5c95f3bd9",
+  "u64_resume_sha256": "8fa5c057d965df1bc8dfb83a3477a2b7064dfd81c17efd1cc0cf808671bf9414",
+  "seed": 11,
+  "resume_update": 64,
+  "resume_model_steps": 1048576,
+  "warmup_completed": 20,
+  "schedule_steps": 200000000,
+  "reward_opponents_architecture_ppo_unchanged": true,
+  "first_committed_endpoints": [
+    128,
+    192,
+    256
+  ],
+  "subsequent_endpoints": [
+    512,
+    768,
+    1024,
+    1280,
+    1536,
+    1792,
+    2048
+  ],
+  "maximum_update": 2048,
+  "maximum_additional_updates": 1984,
+  "maximum_additional_decisions": 32505856,
+  "optimization_stop_utc": "2026-10-26T21:50:00+00:00",
+  "compute_stop_utc": "2026-10-26T21:55:00+00:00",
+  "local_departure": "2026-10-26T18:00:00-04:00",
+  "time_overrides_previous_1800_second_and_u256_caps": true,
+  "full_update_start_reserve_seconds": 60,
+  "per_optimizer_step_absolute_guard": true,
+  "next_block_fit_rule": "at scheduled endpoints>=u256 use measured compute seconds/update*nextblock*1.25+60s, and measured panel time*1.25; stop if next block cannot fit absolute deadlines",
+  "plateau_rule": "from u1024 onward, stop at current endpoint if last3 post-u256 scheduled complete panels have win-count range<=2/100; development-panel hint, not statistical convergence",
+  "diagnostic": {
+    "checkpoint": "u64",
+    "seed": 19005,
+    "frames_cap": 750,
+    "short_trajectories": 1,
+    "not_independent_winrate": true
+  },
+  "panels": {
+    "seeds_start": 19000,
+    "seeds_end": 19099,
+    "cases": 100,
+    "envs": 1,
+    "opponent": "Laika",
+    "policy": "argmax",
+    "max_seconds": 240,
+    "reuse_u64_existing_panel": true,
+    "same_development_panel_not_generalization": true
+  },
+  "storage": {
+    "existing_D_root_cap_bytes": 30000000,
+    "observed_existing_bytes": 21319985,
+    "estimated_additional_final_bytes": 5050000,
+    "estimated_additional_transient_peak_bytes": 8350000,
+    "free_reserve_bytes": 10737418240,
+    "preserve_all_old_results": true,
+    "single_new_rolling_checkpoint_group": true,
+    "no_models_per_panel": true,
+    "compact_metrics_and_case_telemetry": true
+  },
+  "telemetry": [
+    "action_counts",
+    "displacement_cells_public_float32",
+    "stationary_frames",
+    "neutral_requests",
+    "idle_pressure_active_frames",
+    "fire_on_off_requests",
+    "press_release_edges",
+    "actual_shots",
+    "actual_hits"
+  ],
+  "tensor_numpy_cuda_rng_restored": true,
+  "native_episodes_reset_not_tick_exact": true,
+  "stop_on": [
+    "absolute deadline",
+    "nonfinite",
+    "unexplained restore error",
+    "storage reserve",
+    "declared plateau",
+    "maximum update"
+  ],
+  "no_new_packages_downloads_runtime_storage_scope_or_cloud": true
+}

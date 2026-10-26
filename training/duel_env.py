@@ -9,6 +9,7 @@ across a `step` has to be copied.
 from __future__ import annotations
 
 import ctypes
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +32,9 @@ SCALAR_DIM = OBS_DIM - MAP_DIM - BULLET_BLOCK   # 70
 OUTCOME_NAMES = {0: "running", 1: "win", 2: "loss", 3: "double", 4: "draw"}
 OPPONENT_NAMES = {0: "laika", 1: "mpc", 2: "frozen"}
 
-DEFAULT_LIBRARY = Path("engine/target/release/libkf_engine.dylib")
+DEFAULT_LIBRARY = Path("engine/target/release") / (
+    "libkf_engine.dylib" if sys.platform == "darwin" else "libkf_engine.so"
+)
 
 
 class DuelVec:

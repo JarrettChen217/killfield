@@ -25,6 +25,8 @@ import argparse
 import json
 import math
 import os
+import resource
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -143,7 +145,7 @@ def tensors(env, device):
     )
 
 
-def pick_device(model) -> torch.device:
+def pick_device(model, requested: str = "auto") -> torch.device:
     """Time both and take the faster.
 
     This network is a few hundred thousand parameters, which on Apple silicon
@@ -152,6 +154,15 @@ def pick_device(model) -> torch.device:
     than hardcode a guess that goes stale when the architecture changes, run
     twenty forward passes on each.
     """
+    if requested not in ("auto", "cpu", "cuda", "mps"):
+        raise ValueError(f"unsupported device: {requested}")
+    if requested != "auto":
+        if requested == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("explicit CUDA requested, but CUDA is unavailable")
+        if requested == "mps" and not torch.backends.mps.is_available():
+            raise RuntimeError("explicit MPS requested, but MPS is unavailable")
+        return torch.device(requested)
+
     candidates = [torch.device("cpu")]
     if torch.backends.mps.is_available():
         candidates.append(torch.device("mps"))
@@ -315,12 +326,20 @@ def main():
                              "defaults to --init-from")
     parser.add_argument("--threads", type=int, default=0,
                         help="engine worker threads; 0 asks the OS")
+    parser.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto",
+                        help="explicit backend; unavailable CUDA/MPS fail instead of falling back")
+    parser.add_argument("--timing-profile", action="store_true",
+                        help="opt-in synchronized engineering timing and memory counters")
     parser.add_argument("--output", type=Path, default=Path("outputs/ppo_duel_v1"))
     parser.add_argument("--save-every", type=int, default=200_000,
                         help="publish live.pt/live.json every N steps; 0 disables")
     parser.add_argument("--research-context", type=Path, default=None,
                         help="opt-in Tank research hook/context; default trainer unchanged")
     args = parser.parse_args()
+    profile_started = time.perf_counter()
+    profile = {"inference_forward_seconds": 0.0, "sampler_seconds": 0.0,
+               "rollout_seconds": 0.0, "advantage_transfer_seconds": 0.0,
+               "update_seconds": 0.0}
     research_hook = None
     if args.research_context:
         import importlib.util
@@ -347,8 +366,21 @@ def main():
     model = ActorCritic()
     parameters = sum(p.numel() for p in model.parameters())
     print(f"duel PPO · {parameters:,} parameters · picking a device:", flush=True)
-    device = torch.device("cpu") if research_hook else pick_device(model)
+    device = (torch.device("cpu") if research_hook and args.device == "auto"
+              else pick_device(model, args.device))
     model = model.to(device)
+
+    def sampling_forward(network, obs, mask):
+        if not args.timing_profile:
+            return network(obs, mask)
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        before = time.perf_counter()
+        result = network(obs, mask)
+        if device.type == "cuda":
+            torch.cuda.synchronize(device)
+        profile["inference_forward_seconds"] += time.perf_counter() - before
+        return result
 
     if args.init_from and args.resume:
         raise SystemExit("--init-from and --resume mean different things; pick one")
@@ -430,6 +462,7 @@ def main():
                               warmup_completed, save_live, save_resume, started, schedule_steps)
 
     for update in range(updates):
+        rollout_started = time.perf_counter()
         # Linear decay to zero across the lineage's whole budget. A constant
         # rate collapsed irreversibly at ~2M steps once and never came back.
         progress = min((trained_steps + total) / max(schedule_steps, 1), 1.0)
@@ -460,7 +493,7 @@ def main():
                 obs_t, mask_t = tensors(env, device)
                 obs_buf[t] = env.obs
                 mask_buf[t] = env.masks.astype(bool)
-                logits, value = model(obs_t, mask_t)
+                logits, value = sampling_forward(model, obs_t, mask_t)
                 dist = Categorical(logits=logits)
                 action = dist.sample()
                 act_buf[t] = action.cpu().numpy()
@@ -476,11 +509,12 @@ def main():
                                              dtype=torch.float32, device=device)
                     their_mask = torch.as_tensor(env.masks_opponent.astype(bool),
                                                  dtype=torch.bool, device=device)
-                    logits_o, _ = frozen(theirs, their_mask)
+                    logits_o, _ = sampling_forward(frozen, theirs, their_mask)
                     opponent_action = (
                         Categorical(logits=logits_o).sample()
                         .cpu().numpy().astype(np.uint16)
                     )
+                sampler_started = time.perf_counter()
                 env.step(act_buf[t].astype(np.uint16), opponent_action)
                 rew_buf[t] = env.rewards
                 done_buf[t] = env.dones.astype(bool)
@@ -488,10 +522,13 @@ def main():
                     tally.record(int(env.outcomes[i]), int(env.opponents[i]),
                                  int(env.frames[i]), int(env.action_changes[i]))
                 env.reset_done()
+                profile["sampler_seconds"] += time.perf_counter() - sampler_started
             obs_t, mask_t = tensors(env, device)
-            _, last_value = model(obs_t, mask_t)
+            _, last_value = sampling_forward(model, obs_t, mask_t)
             last_value = last_value.cpu().numpy()
 
+        profile["rollout_seconds"] += time.perf_counter() - rollout_started
+        advantage_started = time.perf_counter()
         advantages = np.zeros(shape, np.float32)
         gae = np.zeros(config.envs, np.float32)
         for t in reversed(range(config.rollout_steps)):
@@ -515,7 +552,11 @@ def main():
         b_val = flat(val_buf).float()
         b_adv = (b_adv - b_adv.mean()) / (b_adv.std() + 1e-8)
 
+        if args.timing_profile and device.type == "cuda":
+            torch.cuda.synchronize(device)
+        profile["advantage_transfer_seconds"] += time.perf_counter() - advantage_started
         model.train()
+        update_started = time.perf_counter()
         indices = np.arange(batch)
         size = batch // config.minibatches
         entropy_seen = 0.0
@@ -560,6 +601,9 @@ def main():
                 nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
                 optimiser.step()
 
+        if args.timing_profile and device.type == "cuda":
+            torch.cuda.synchronize(device)
+        profile["update_seconds"] += time.perf_counter() - update_started
         total += batch
         if critic_only:
             warmup_completed += 1
@@ -584,6 +628,18 @@ def main():
             "clipfrac": clipfrac_sum / max(diagnostic_minibatches, 1),
             **tally.summary(),
         }
+        if args.timing_profile:
+            record["engineering_profile"] = {
+                **profile,
+                "actual_model_device": str(next(model.parameters()).device),
+                "process_until_metric_seconds": time.perf_counter() - profile_started,
+                "rss_peak_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                                  * (1 if sys.platform == "darwin" else 1024),
+                "cuda_peak_allocated_bytes": (torch.cuda.max_memory_allocated(device)
+                                              if device.type == "cuda" else None),
+                "cuda_peak_reserved_bytes": (torch.cuda.max_memory_reserved(device)
+                                             if device.type == "cuda" else None),
+            }
         with metrics_path.open("a") as handle:
             handle.write(json.dumps(record) + "\n")
             if research_hook:

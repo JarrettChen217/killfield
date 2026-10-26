@@ -63,6 +63,7 @@ def evaluate(model, device, episodes: int, envs: int, weights,
     turn_total = 0
     throttle_reversals = 0
     steps = 0
+    action_counts = np.zeros(18, np.int64)
 
     try:
         while sum(sum(r.values()) for r in results.values()) < episodes:
@@ -76,6 +77,7 @@ def evaluate(model, device, episodes: int, envs: int, weights,
             action = action.cpu().numpy().astype(np.int64)
 
             # CANDIDATES index = throttle * 6 + turn * 2 + fire.
+            action_counts += np.bincount(action, minlength=18)
             throttle, turn = action // 6, (action // 2) % 3
             live = previous >= 0
             if live.any():
@@ -134,6 +136,9 @@ def evaluate(model, device, episodes: int, envs: int, weights,
         "turn_reversal_off_target": int(turn_reversals[1]),
         "throttle_reversal_rate": throttle_reversals / max(turn_total, 1),
         "steps": steps,
+        "action_counts": action_counts.tolist(),
+        "reverse_requests": int(action_counts[:6].sum()),
+        "fire_requests": int(action_counts[1::2].sum()),
     }
 
 

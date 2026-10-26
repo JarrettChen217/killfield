@@ -177,7 +177,7 @@ def pick_device(model) -> torch.device:
 
 
 def save_resume(output: Path, model, optimiser, trained_steps: int,
-                schedule_steps: int):
+                schedule_steps: int, research: dict | None = None):
     """Everything needed to carry on where this left off.
 
     Kept beside `live.pt` rather than inside it: the page only ever wants
@@ -197,6 +197,7 @@ def save_resume(output: Path, model, optimiser, trained_steps: int,
             "trained_steps": trained_steps,
             "schedule_steps": schedule_steps,
             "arch": ARCH,
+            **({"research": research} if research is not None else {}),
         },
         tmp,
     )
@@ -317,7 +318,17 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("outputs/ppo_duel_v1"))
     parser.add_argument("--save-every", type=int, default=200_000,
                         help="publish live.pt/live.json every N steps; 0 disables")
+    parser.add_argument("--research-context", type=Path, default=None,
+                        help="opt-in Tank research hook/context; default trainer unchanged")
     args = parser.parse_args()
+    research_hook = None
+    if args.research_context:
+        import importlib.util
+        context = json.loads(args.research_context.read_text())
+        spec = importlib.util.spec_from_file_location("tank_killfield_research", context["hook_path"])
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        research_hook = module.ResearchHook(args.research_context)
 
     config = Config(
         total_steps=args.steps,
@@ -336,7 +347,7 @@ def main():
     model = ActorCritic()
     parameters = sum(p.numel() for p in model.parameters())
     print(f"duel PPO · {parameters:,} parameters · picking a device:", flush=True)
-    device = pick_device(model)
+    device = torch.device("cpu") if research_hook else pick_device(model)
     model = model.to(device)
 
     if args.init_from and args.resume:
@@ -390,6 +401,7 @@ def main():
         if args.schedule_steps is None:
             schedule_steps = int(resume_state.get("schedule_steps", schedule_steps))
         print("restored the Adam state", flush=True)
+    base_update, warmup_completed = research_hook.restore(resume_state) if research_hook else (0, 0)
     start_progress = min(trained_steps / max(schedule_steps, 1), 1.0)
     print(f"schedule: {trained_steps:,}/{schedule_steps:,} done "
           f"({start_progress:.1%}) · lr starts at "
@@ -413,6 +425,10 @@ def main():
                   trained_steps, schedule_steps)
         save_resume(output, model, optimiser, trained_steps, schedule_steps)
 
+    if research_hook:
+        research_hook.publish(model, optimiser, config, trained_steps, base_update,
+                              warmup_completed, save_live, save_resume, started, schedule_steps)
+
     for update in range(updates):
         # Linear decay to zero across the lineage's whole budget. A constant
         # rate collapsed irreversibly at ~2M steps once and never came back.
@@ -424,7 +440,10 @@ def main():
         # Until the critic has something to say, moving the policy against its
         # advantage estimates is noise amplification. A resumed run's critic is
         # not stale — it was trained on this very reward — so it skips this.
-        critic_only = resume_state is None and update < config.critic_warmup_updates
+        critic_only = (warmup_completed < config.critic_warmup_updates if research_hook
+                       else resume_state is None and update < config.critic_warmup_updates)
+        if research_hook:
+            research_hook.before_rollout(batch)
 
         shape = (config.rollout_steps, config.envs)
         obs_buf = np.empty(shape + (OBS_DIM,), np.float32)
@@ -542,6 +561,8 @@ def main():
                 optimiser.step()
 
         total += batch
+        if critic_only:
+            warmup_completed += 1
         # How much of the outcome the critic actually explains. This project's
         # ablations put it near zero; if it stays there, the sparse reward is
         # not going to carry a policy and that is worth knowing early.
@@ -565,6 +586,9 @@ def main():
         }
         with metrics_path.open("a") as handle:
             handle.write(json.dumps(record) + "\n")
+            if research_hook:
+                handle.flush()
+                os.fsync(handle.fileno())
 
         rate = lambda side: (
             "—" if record[side]["win_rate"] is None
@@ -581,6 +605,10 @@ def main():
             flush=True,
         )
         tally.reset()
+        if research_hook:
+            research_hook.publish(model, optimiser, config, trained_steps + total,
+                                  base_update + update + 1, warmup_completed,
+                                  save_live, save_resume, started, schedule_steps)
 
         if args.save_every and total - published >= args.save_every:
             published = total

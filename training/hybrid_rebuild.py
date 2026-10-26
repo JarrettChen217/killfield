@@ -71,6 +71,12 @@ class HybridDuelVec(DuelVec):
     obs_dim = 1028
     schema_version = 24
 
+    def __init__(self, *args, **kwargs):
+        library = os.environ.get('KF_HYBRID_LIBRARY')
+        if not library:
+            raise RuntimeError('explicit KF_HYBRID_LIBRARY required; legacy library is protected')
+        super().__init__(*args, library=Path(library), **kwargs)
+
 
 def install():
     original.LegacyActorCritic = LegacyActorCritic

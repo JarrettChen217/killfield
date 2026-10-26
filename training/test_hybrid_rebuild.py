@@ -36,6 +36,45 @@ class ReconstructionContract(unittest.TestCase):
         advantage = compute_advantages(reward, value, done, np.array([999., 3.]), .9, .95)
         np.testing.assert_allclose(advantage + value, [[1., 2.7]], atol=1e-6)
 
+    def test_original_js_actor_reference_on_identical_inputs(self):
+        import json, os, subprocess, tempfile
+        from pathlib import Path
+        import numpy as np
+        import torch
+        from hybrid_rebuild import HybridActorCritic, install
+        assets = os.environ.get('KF_MATURE_ASSETS')
+        if not assets:
+            self.skipTest('read-only mature reference assets not supplied')
+        assets = Path(assets)
+        install()
+        model = HybridActorCritic().eval()
+        manifest = json.loads((assets/'assets/hybrid.json').read_text())
+        weights = np.fromfile(assets/'assets/hybrid.bin', dtype='<f4')
+        actor = {key:torch.from_numpy(weights[spec['offset']:spec['offset']+spec['length']]
+                                      .copy().reshape(spec['shape']))
+                 for key,spec in manifest['tensors'].items()}
+        result = model.load_state_dict(actor, strict=False)
+        self.assertEqual(set(result.missing_keys), {'critic.weight','critic.bias'})
+        self.assertEqual(result.unexpected_keys, [])
+        rng = np.random.default_rng(240918)
+        obs = rng.uniform(-1,1,(3,1028)).astype(np.float32)
+        masks = np.array([[0]*10,[1,0,1,1,0,0,1,0,0,1],[1]*10], bool)
+        dodge = rng.uniform(-1,1,(3,9)).astype(np.float32)
+        with torch.inference_mode():
+            expected = model(torch.from_numpy(obs), torch.from_numpy(masks),
+                             torch.from_numpy(dodge))[0].numpy()
+        fixture = {'obs':obs.tolist(),'mask':masks.astype(int).tolist(),'dodge':dodge.tolist()}
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as temp:
+            inp = Path(temp)/'fixture.json'; inp.write_text(json.dumps(fixture))
+            output = subprocess.check_output(['node',str(Path(__file__).with_name('check_hybrid_js.mjs')),
+                                              str(assets),str(inp)],text=True)
+        actual = np.array(json.loads(output))
+        np.testing.assert_allclose(actual, expected, atol=2e-4, rtol=1e-4)
+        self.assertTrue(np.array_equal(actual.argmax(1), expected.argmax(1)))
+        print('ACTOR_REFERENCE '+json.dumps({'cases':3,'max_abs_error':float(abs(actual-expected).max()),
+                                           'actions':actual.argmax(1).tolist(),
+                                           'not_bitwise_or_environment_parity':True}), flush=True)
+
 
 if __name__ == '__main__':
     unittest.main()

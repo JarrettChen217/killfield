@@ -1,3 +1,5 @@
+> Fork status (2026-10-25): read [research handoff](../repro/RESEARCH_HANDOFF.md) first. `research/rl-bot` contains the isolated engineering smoke only; upstream training/checkpoint statements below are historical, not our measured result. No new training is authorized.
+
 # 接手须知
 
 > 更新于 2026-09-03。这一份讲**现在跑着什么、模型在哪、什么已经查过**；

@@ -29,3 +29,10 @@ For the current PPO route:
 
 These are reporting and review requirements, not promotion criteria. The user decides behavior
 quality by watching the model.
+
+## Fork research workflow (Hao)
+
+- Read `repro/RESEARCH_HANDOFF.md` for this fork's current state. Upstream documents are historical context where they conflict with the fork's measured evidence.
+- Use `research/rl-bot` as the research integration branch. New task branches start there and integrate there after scoped validation/review. Main promotion and publication require separate explicit human authorization. Do not automatically merge the upstream MPC main and RL line.
+- Mac edits/commits code, tests, configuration and locks. Before approved target work, Ubuntu must match the same branch/full HEAD and source fingerprints with clean tracked files; use frozen isolation under sibling `.killfield-runtime`. Do not change system Python/drivers/shell or install coding agents. Preserve unexpected changes and report; no automatic reset/stash/merge/cleanup.
+- Freeze expected outcome, workload/time/disk budget, comparison, continuation and stop rules before Hao authorizes execution. Report actual versus expected results, preserve interruptions and all artifacts, then stop for the next decision. Source integration does not approve a training run or establish learned strength.

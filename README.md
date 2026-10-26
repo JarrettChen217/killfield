@@ -1,3 +1,5 @@
+> Fork research branch: `research/rl-bot`. Our [verified handoff](repro/RESEARCH_HANDOFF.md) records schema20 engineering smoke only, with zero actor-loss updates. The upstream maturity/benchmark claims below have not been reproduced by this fork. Use the isolated [setup record](repro/README.md), not global installations.
+
 # Killfield · `rl` 分支
 
 在 Tank Trouble 风格的迷宫坦克对战里，用 PPO 训练一个 actor-critic 策略 **Hybrid**：

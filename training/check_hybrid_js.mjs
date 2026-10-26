@@ -2,6 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import {pathToFileURL} from 'url';
+async function main() {
 const [assets,input] = process.argv.slice(2);
 const {HybridPolicy} = await import(pathToFileURL(path.resolve(assets,'src/hybrid.js')).href);
 const manifest = JSON.parse(fs.readFileSync(path.join(assets,'assets/hybrid.json')));
@@ -11,3 +12,6 @@ const policy = new HybridPolicy(manifest, weights);
 const fixture = JSON.parse(fs.readFileSync(input));
 console.log(JSON.stringify(fixture.obs.map((obs,i)=>Array.from(policy.logits(
   new Float32Array(obs),fixture.mask[i],new Float32Array(fixture.dodge[i]))))));
+
+}
+main().catch(error => { console.error(error); process.exitCode=1; });

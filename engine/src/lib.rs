@@ -8,6 +8,8 @@ pub mod chain;
 pub mod constants;
 pub mod duel;
 pub mod duel_obs;
+#[cfg(feature = "hybrid-rebuild")]
+pub mod hybrid_obs;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
 #[cfg(not(target_arch = "wasm32"))]

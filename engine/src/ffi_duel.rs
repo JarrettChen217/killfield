@@ -12,7 +12,10 @@ use crate::duel::{
     apply_duel_action, duel_game, duel_settle, DuelState, Opponent, DUEL_ACTIONS,
     DUEL_FRAMES, DUEL_GRACE_FRAMES,
 };
+#[cfg(not(feature = "hybrid-rebuild"))]
 use crate::duel_obs::{encode, DuelObservation, BULLET_SLOTS, OBS_DIM, OBS_SCHEMA_VERSION};
+#[cfg(feature = "hybrid-rebuild")]
+use crate::hybrid_obs::{DuelObservation, SeatHistory, BULLET_SLOTS, OBS_DIM, OBS_SCHEMA_VERSION};
 use crate::game::Game;
 use crate::rng::Rng;
 
@@ -36,6 +39,8 @@ struct Slot {
     /// exactly the observation it would see as the policy.
     observation_opponent: DuelObservation,
     last_action: Option<u16>,
+    #[cfg(feature = "hybrid-rebuild")]
+    histories: [SeatHistory; 2],
     done: bool,
 }
 
@@ -49,6 +54,8 @@ impl Slot {
             observation: DuelObservation::default(),
             observation_opponent: DuelObservation::default(),
             last_action: None,
+            #[cfg(feature = "hybrid-rebuild")]
+            histories: [SeatHistory::default(); 2],
             done: false,
         }
     }
@@ -159,6 +166,8 @@ impl DuelVecEnv {
     /// Encode into the slot's own buffer. Touches nothing shared, so this is
     /// what runs on the worker threads.
     fn encode_into_slot(slot: &mut Slot) {
+        #[cfg(not(feature = "hybrid-rebuild"))]
+        {
         encode(
             &slot.game,
             0,
@@ -176,6 +185,20 @@ impl DuelVecEnv {
                 slot.state.opponent_last_action(),
                 &mut slot.observation_opponent,
             );
+        }
+        }
+        #[cfg(feature = "hybrid-rebuild")]
+        {
+            use crate::hybrid_obs::{encode, reconstructed_dodge, DODGE_OFFSET};
+            for seat in 0..2 {
+                if seat == 1 && !slot.state.opponent.is_external() { continue; }
+                let out = if seat == 0 { &mut slot.observation }
+                          else { &mut slot.observation_opponent };
+                encode(&slot.game, seat, &slot.state.prev_pose, &slot.state.boxes,
+                       &slot.histories[seat], out);
+                out.values[DODGE_OFFSET..DODGE_OFFSET + 9]
+                    .copy_from_slice(&reconstructed_dodge(&slot.game, seat));
+            }
         }
     }
 
@@ -252,6 +275,8 @@ impl DuelVecEnv {
                             .unwrap_or(8)
                             .min(DUEL_ACTIONS as u16 - 1);
 
+                        #[cfg(feature = "hybrid-rebuild")]
+                        slot.histories[0].record(action);
                         apply_duel_action(&mut slot.game, 0, action);
                         slot.state.record_action(action);
                         slot.last_action = Some(action);
@@ -264,6 +289,10 @@ impl DuelVecEnv {
                             .get(base + k)
                             .copied()
                             .map(|a| a.min(DUEL_ACTIONS as u16 - 1));
+                        #[cfg(feature = "hybrid-rebuild")]
+                        if slot.state.opponent.is_external() {
+                            if let Some(a) = supplied { slot.histories[1].record(a); }
+                        }
                         slot.state.before_step_with(&mut slot.game, supplied);
                         let events = slot.game.step();
                         let outcome = duel_settle(&slot.game, &mut slot.state, &events);

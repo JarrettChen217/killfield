@@ -296,9 +296,23 @@ class Tally:
         return out
 
 
+def compute_advantages(rewards, values, dones, last_value, gamma, gae_lambda):
+    """Original GAE factored out unchanged for terminal/bootstrap regression."""
+    advantages = np.zeros_like(rewards)
+    gae = np.zeros(rewards.shape[1], np.float32)
+    for t in reversed(range(rewards.shape[0])):
+        nxt = last_value if t + 1 == rewards.shape[0] else values[t + 1]
+        alive = 1.0 - dones[t]
+        delta = rewards[t] + gamma * nxt * alive - values[t]
+        gae = delta + gamma * gae_lambda * alive * gae
+        advantages[t] = gae
+    return advantages
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--steps", type=int, default=Config.total_steps)
+    parser.add_argument("--critic-warmup-updates", type=int, default=Config.critic_warmup_updates)
     parser.add_argument("--envs", type=int, default=Config.envs)
     parser.add_argument("--seed", type=int, default=Config.seed)
     parser.add_argument("--mix", type=float, nargs=3,
@@ -351,6 +365,7 @@ def main():
 
     config = Config(
         total_steps=args.steps,
+        critic_warmup_updates=args.critic_warmup_updates,
         envs=args.envs,
         seed=args.seed,
         laika_weight=args.mix[0],
@@ -529,17 +544,8 @@ def main():
 
         profile["rollout_seconds"] += time.perf_counter() - rollout_started
         advantage_started = time.perf_counter()
-        advantages = np.zeros(shape, np.float32)
-        gae = np.zeros(config.envs, np.float32)
-        for t in reversed(range(config.rollout_steps)):
-            nxt = last_value if t + 1 == config.rollout_steps else val_buf[t + 1]
-            # Every `done` here is a real terminal — even the draw, which is a
-            # result with its own reward rather than a truncation — so the
-            # bootstrap is cut in every case.
-            alive = 1.0 - done_buf[t]
-            delta = rew_buf[t] + config.gamma * nxt * alive - val_buf[t]
-            gae = delta + config.gamma * config.gae_lambda * alive * gae
-            advantages[t] = gae
+        advantages = compute_advantages(rew_buf, val_buf, done_buf, last_value,
+                                        config.gamma, config.gae_lambda)
         returns = advantages + val_buf
 
         flat = lambda a: torch.as_tensor(a.reshape((batch,) + a.shape[2:]), device=device)

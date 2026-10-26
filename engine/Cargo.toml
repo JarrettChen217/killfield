@@ -12,6 +12,8 @@ crate-type = ["rlib", "cdylib"]
 # (e.g. `paper/tools/record_replay.py`) that need the single-instance
 # render/step API from a native .dylib rather than a browser wasm32 build.
 record = []
+# Opt-in reconstructed schema24 training ABI; legacy default remains schema20.
+hybrid-rebuild = []
 
 [profile.release]
 opt-level = 3

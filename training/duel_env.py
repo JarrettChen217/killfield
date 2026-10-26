@@ -38,6 +38,9 @@ DEFAULT_LIBRARY = Path("engine/target/release") / (
 
 
 class DuelVec:
+    obs_dim = OBS_DIM
+    schema_version = OBS_SCHEMA_VERSION
+
     def __init__(self, count: int, seed: int, weights=(1.0, 0.0, 0.0),
                  threads: int = 0, library: Path = DEFAULT_LIBRARY):
         """`weights` is (laika, mpc, frozen); it is normalised, not required to
@@ -57,7 +60,7 @@ class DuelVec:
             int(self.lib.kf_duel_action_count()),
             int(self.lib.kf_duel_obs_schema_version()),
         )
-        expected = (OBS_DIM, BULLET_SLOTS, ACTIONS, OBS_SCHEMA_VERSION)
+        expected = (self.obs_dim, BULLET_SLOTS, ACTIONS, self.schema_version)
         if native != expected:
             raise RuntimeError(
                 f"engine/python schema mismatch: {native} != {expected}. "
@@ -83,10 +86,10 @@ class DuelVec:
         # threads=0 lets the engine ask the OS how many cores it has.
         self.handle = self.lib.kf_duel_new(count, seed, *permille, threads)
 
-        self.obs = self._view("kf_duel_obs", ctypes.c_float, (count, OBS_DIM))
+        self.obs = self._view("kf_duel_obs", ctypes.c_float, (count, self.obs_dim))
         self.masks = self._view("kf_duel_masks", ctypes.c_uint8, (count, BULLET_SLOTS))
         self.obs_opponent = self._view("kf_duel_opponent_obs", ctypes.c_float,
-                                       (count, OBS_DIM))
+                                       (count, self.obs_dim))
         self.masks_opponent = self._view("kf_duel_opponent_masks", ctypes.c_uint8,
                                          (count, BULLET_SLOTS))
         self.needs_action = self._view("kf_duel_needs_action", ctypes.c_uint8, (count,))
